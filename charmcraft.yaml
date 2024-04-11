@@ -1,0 +1,36 @@
+name: cephfs-client
+
+type: charm
+
+title: CephFS Client
+
+summary: Mount CephFS shares on machine charms.
+
+description: |
+  Mount CephFS shares on machine charms.
+
+  Enables access to exported CephFS shares.
+
+bases:
+  - build-on:
+      - name: ubuntu
+        channel: "22.04"
+    run-on:
+      - name: ubuntu
+        channel: "22.04"
+
+subordinate: true
+
+config:
+  options:
+    mountpoint:
+      description: Location to mount the filesystem on the machine.
+      type: string
+
+requires:
+  cephfs-share:
+    interface: cephfs_share
+    limit: 1
+  juju-info:
+    interface: juju-info
+    scope: container
