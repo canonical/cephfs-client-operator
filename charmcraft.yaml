@@ -21,11 +21,9 @@ bases:
 
 subordinate: true
 
-config:
-  options:
-    mountpoint:
-      description: Location to mount the filesystem on the machine.
-      type: string
+peers:
+  mount:
+    interface: mount
 
 requires:
   cephfs-share:
@@ -34,3 +32,29 @@ requires:
   juju-info:
     interface: juju-info
     scope: container
+
+config:
+  options:
+    mountpoint:
+      description: Location to mount the filesystem on the machine.
+      type: string
+    noexec:
+      default: false
+      description: |
+        Block execution of binaries on CephFS share.
+      type: boolean
+    nosuid:
+      default: false
+      description: |
+        Do not honour suid and sgid bits on CephFS share.
+      type: boolean
+    nodev:
+      default: false
+      description: |
+        Blocking interpretation of character and/or block 
+        devices on CephFS share.
+      type: boolean
+    read-only:
+      default: false
+      description: Mount CephFS share as read-only.
+      type: boolean

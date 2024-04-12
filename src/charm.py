@@ -5,9 +5,11 @@
 """Charm the application."""
 
 import logging
+from typing import Any
 
 import ops
 import utils.manager as cephfs
+import json
 from charms.storage_libs.v0.ceph_interfaces import (
     CephFSRequires,
     MountShareEvent,
@@ -17,17 +19,14 @@ from charms.storage_libs.v0.ceph_interfaces import (
 
 logger = logging.getLogger(__name__)
 
+PEER_NAME = "mount"
+MOUNT_OPTS = ["noexec", "nosuid", "nodev", "read-only"]
 
 class CephFSClientOperatorCharm(ops.CharmBase):
     """Charm the application."""
 
-    _stored = ops.StoredState()
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # TODO: Add mount opts
-        self._stored.set_default(mountpoint=None)
 
         self._ceph_share = CephFSRequires(self, "cephfs-share")
 
@@ -53,17 +52,29 @@ class CephFSClientOperatorCharm(ops.CharmBase):
             self.unit.status = ops.BlockedStatus("No configured mountpoint")
             return
 
-        if self._stored.mountpoint:
+        config = self.get_state("config")
+
+        if config.get("mountpoint"):
             logger.warning(f"Mountpoint can only be set once. Ignoring {mountpoint}")
         else:
             logger.debug(f"Setting mountpoint as {mountpoint}")
-            self._stored.mountpoint = mountpoint
+            config["mountpoint"] = mountpoint
+        
+        for opt in MOUNT_OPTS:
+            val = config.get(opt)
+            new_val = self.config.get(opt)
+            if val is None:
+                config[opt] = new_val
+            else:
+                logger.warning(f"{opt} can only be set once. Ignoring {new_val}.")
+
+        self.set_state("config", config)
 
         self.unit.status = ops.WaitingStatus("Waiting for CephFS share")
 
     def _on_stop(self, _) -> None:
         """Clean up machine before de-provisioning."""
-        if cephfs.mounted(mountpoint := self.config.get("mountpoint")):
+        if cephfs.mounted(mountpoint := self.get_state("config").get("mountpoint", "")):
             self.unit.status = ops.MaintenanceStatus(f"Unmounting {mountpoint}")
             cephfs.umount(mountpoint)
 
@@ -77,18 +88,26 @@ class CephFSClientOperatorCharm(ops.CharmBase):
     def _on_server_connected(self, event: ServerConnectedEvent) -> None:
         """Handle when client has connected to CephFS server."""
         self.unit.status = ops.MaintenanceStatus("Requesting CephFS share")
-        if not self._stored.mountpoint:
+        mountpoint = self.get_state("config").get("mountpoint")
+        if not mountpoint:
             logger.warning("Deferring ServerConnectedEvent event because mountpoint is not set")
             self.unit.status = ops.BlockedStatus("No configured mountpoint")
             event.defer()
             return
 
-        self._ceph_share.request_share(event.relation.id, name=self._stored.mountpoint)
+        self._ceph_share.request_share(event.relation.id, name=mountpoint)
 
     def _on_mount_share(self, event: MountShareEvent) -> None:
         """Mount a CephFS share."""
+        config = self.get_state("config")
         try:
-            if not cephfs.mounted(self._stored.mountpoint):
+            mountpoint = config["mountpoint"]
+            if not cephfs.mounted(mountpoint):
+                opts = []
+                opts.append("noexec" if config["noexec"] else "exec")
+                opts.append("nosuid" if config["nosuid"] else "suid")
+                opts.append("nodev" if config["nodev"] else "dev")
+                opts.append("ro" if config["read-only"] else "rw")
                 share_info = event.share_info
                 auth_info = self.model.get_secret(id=share_info.auth_id).get_content()
 
@@ -101,30 +120,50 @@ class CephFSClientOperatorCharm(ops.CharmBase):
                         username=auth_info["username"],
                         cephx_key=auth_info["cephx-key"],
                     ),
-                    self._stored.mountpoint,
+                    mountpoint,
+                    options=opts
                 )
                 self.unit.status = ops.ActiveStatus(
-                    f"CephFS share mounted at {self._stored.mountpoint}"
+                    f"CephFS share mounted at {mountpoint}"
                 )
             else:
-                logger.warning(f"Mountpoint {self._stored.mountpoint} already mounted")
+                logger.warning(f"Mountpoint {mountpoint} already mounted")
         except cephfs.Error as e:
             self.unit.status = ops.BlockedStatus(e.message)
 
     def _on_umount_share(self, event: UmountShareEvent) -> None:
         """Umount a CephFS share."""
+        mountpoint = self.get_state("config")["mountpoint"]
+
         self.unit.status = ops.MaintenanceStatus(
-            f"Unmounting CephFS share at {self._stored.mountpoint}"
+            f"Unmounting CephFS share at {mountpoint}"
         )
         try:
-            if cephfs.mounted(self._stored.mountpoint):
-                cephfs.umount(self._stored.mountpoint)
+            if cephfs.mounted(mountpoint):
+                cephfs.umount(mountpoint)
             else:
-                logger.warning(f"{self._stored.mountpoint} is not mounted")
+                logger.warning(f"{mountpoint} is not mounted")
 
             self.unit.status = ops.WaitingStatus("Waiting for CephFS share")
         except cephfs.Error as e:
             self.unit.status = ops.BlockedStatus(e.message)
+    
+    @property
+    def peers(self):
+        """Fetch the peer relation."""
+        return self.model.get_relation(PEER_NAME)
+
+    def set_state(self, key: str, data: Any) -> None:
+        """Insert a value into the global state."""
+        self.peers.data[self.app][key] = json.dumps(data)
+    
+    def get_state(self, key: str) -> dict[Any, Any]:
+        """Gets a value from the global state."""
+        if not self.peers:
+            return {}
+        
+        data = self.peers.data[self.app].get(key, "{}")
+        return json.loads(data)
 
 
 if __name__ == "__main__":  # pragma: nocover

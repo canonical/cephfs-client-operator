@@ -155,7 +155,7 @@ def mounted(target: str) -> bool:
     return fetch(target) is not None
 
 
-def mount(fs_info: CephFSInfo, mountpoint: Union[str, os.PathLike]) -> None:
+def mount(fs_info: CephFSInfo, mountpoint: Union[str, os.PathLike], options: Optional[List[str]] = None) -> None:
     """Mount a CephFS share.
 
     Args:
@@ -165,6 +165,8 @@ def mount(fs_info: CephFSInfo, mountpoint: Union[str, os.PathLike]) -> None:
     Raises:
         Error: Raised if the mount operation fails.
     """
+    if options is None:
+        options = []
     # Try to create the mountpoint without checking if it exists to avoid TOCTOU.
     target = pathlib.Path(mountpoint)
     try:
@@ -177,11 +179,11 @@ def mount(fs_info: CephFSInfo, mountpoint: Union[str, os.PathLike]) -> None:
     _logger.debug(f"Mounting CephFS share {endpoint} at {target}")
     autofs_id = _mountpoint_to_autofs_id(target)
     mon_addr = "/".join(fs_info.monitor_hosts)
-    mount_opts = f"-fstype=ceph,mon_addr={mon_addr},secret={fs_info.cephx_key}"
+    mount_opts = ["fstype=ceph", f"mon_addr={mon_addr}", f"secret={fs_info.cephx_key}"] + options
     pathlib.Path(f"/etc/auto.master.d/{autofs_id}.autofs").write_text(
         f"/- /etc/auto.{autofs_id}"
     )
-    pathlib.Path(f"/etc/auto.{autofs_id}").write_text(f"{target} {mount_opts} {endpoint}")
+    pathlib.Path(f"/etc/auto.{autofs_id}").write_text(f"{target} -{','.join(mount_opts)} {endpoint}")
 
     try:
         systemd.service_reload("autofs", restart_on_failure=True)
