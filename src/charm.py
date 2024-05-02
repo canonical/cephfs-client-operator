@@ -4,13 +4,13 @@
 
 """Charm the application."""
 
+import json
 import logging
 from typing import Any
 
 import ops
 import utils.manager as cephfs
-import json
-from charms.storage_libs.v0.ceph_interfaces import (
+from charms.storage_libs.v0.cephfs_interfaces import (
     CephFSRequires,
     MountShareEvent,
     ServerConnectedEvent,
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 PEER_NAME = "mount"
 MOUNT_OPTS = ["noexec", "nosuid", "nodev", "read-only"]
+
 
 class CephFSClientOperatorCharm(ops.CharmBase):
     """Charm the application."""
@@ -59,7 +60,7 @@ class CephFSClientOperatorCharm(ops.CharmBase):
         else:
             logger.debug(f"Setting mountpoint as {mountpoint}")
             config["mountpoint"] = mountpoint
-        
+
         for opt in MOUNT_OPTS:
             val = config.get(opt)
             new_val = self.config.get(opt)
@@ -108,24 +109,9 @@ class CephFSClientOperatorCharm(ops.CharmBase):
                 opts.append("nosuid" if config["nosuid"] else "suid")
                 opts.append("nodev" if config["nodev"] else "dev")
                 opts.append("ro" if config["read-only"] else "rw")
-                share_info = event.share_info
-                auth_info = self.model.get_secret(id=share_info.auth_id).get_content()
 
-                cephfs.mount(
-                    cephfs.CephFSInfo(
-                        fsid=share_info.fsid,
-                        name=share_info.name,
-                        path=share_info.path,
-                        monitor_hosts=share_info.monitor_hosts,
-                        username=auth_info["username"],
-                        cephx_key=auth_info["cephx-key"],
-                    ),
-                    mountpoint,
-                    options=opts
-                )
-                self.unit.status = ops.ActiveStatus(
-                    f"CephFS share mounted at {mountpoint}"
-                )
+                cephfs.mount(event.share_info, event.auth_info, mountpoint, options=opts)
+                self.unit.status = ops.ActiveStatus(f"CephFS share mounted at {mountpoint}")
             else:
                 logger.warning(f"Mountpoint {mountpoint} already mounted")
         except cephfs.Error as e:
@@ -135,9 +121,7 @@ class CephFSClientOperatorCharm(ops.CharmBase):
         """Umount a CephFS share."""
         mountpoint = self.get_state("config")["mountpoint"]
 
-        self.unit.status = ops.MaintenanceStatus(
-            f"Unmounting CephFS share at {mountpoint}"
-        )
+        self.unit.status = ops.MaintenanceStatus(f"Unmounting CephFS share at {mountpoint}")
         try:
             if cephfs.mounted(mountpoint):
                 cephfs.umount(mountpoint)
@@ -147,7 +131,7 @@ class CephFSClientOperatorCharm(ops.CharmBase):
             self.unit.status = ops.WaitingStatus("Waiting for CephFS share")
         except cephfs.Error as e:
             self.unit.status = ops.BlockedStatus(e.message)
-    
+
     @property
     def peers(self):
         """Fetch the peer relation."""
@@ -156,12 +140,12 @@ class CephFSClientOperatorCharm(ops.CharmBase):
     def set_state(self, key: str, data: Any) -> None:
         """Insert a value into the global state."""
         self.peers.data[self.app][key] = json.dumps(data)
-    
+
     def get_state(self, key: str) -> dict[Any, Any]:
         """Gets a value from the global state."""
         if not self.peers:
             return {}
-        
+
         data = self.peers.data[self.app].get(key, "{}")
         return json.loads(data)
 

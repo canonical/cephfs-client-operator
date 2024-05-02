@@ -9,10 +9,11 @@ import pathlib
 import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import Iterator, Optional, Union, List
+from typing import Iterator, List, Optional, Union
 
 import charms.operator_libs_linux.v0.apt as apt
 import charms.operator_libs_linux.v1.systemd as systemd
+import charms.storage_libs.v0.cephfs_interfaces as cephfs
 
 _logger = logging.getLogger(__name__)
 
@@ -51,24 +52,6 @@ class MountInfo:
     options: str
     freq: str
     passno: str
-
-
-@dataclass(frozen=True)
-class CephFSInfo:
-    """Information about a shared CephFS."""
-
-    fsid: str
-    """Id of the Ceph cluster."""
-    name: str
-    """Name of the exported CephFS."""
-    path: str
-    """Exported path of the CephFS."""
-    monitor_hosts: [str]
-    """Address list of the available Ceph MON nodes."""
-    username: str
-    """User with authorization to access the filesystem."""
-    cephx_key: str
-    """Cephx key that authenticates the provided user."""
 
 
 def supported() -> bool:
@@ -136,6 +119,7 @@ def fetch(target: str) -> Optional[MountInfo]:
 
     return None
 
+
 def mounts() -> List[MountInfo]:
     """Get all CephFS mounts on a machine.
 
@@ -146,6 +130,7 @@ def mounts() -> List[MountInfo]:
 
     return list(_mounts("ceph"))
 
+
 def mounted(target: str) -> bool:
     """Determine if CephFS mountpoint is mounted.
 
@@ -155,7 +140,12 @@ def mounted(target: str) -> bool:
     return fetch(target) is not None
 
 
-def mount(fs_info: CephFSInfo, mountpoint: Union[str, os.PathLike], options: Optional[List[str]] = None) -> None:
+def mount(
+    fs_info: cephfs.CephFSShareInfo,
+    auth_info: cephfs.CephFSAuthInfo,
+    mountpoint: Union[str, os.PathLike],
+    options: Optional[List[str]] = None,
+) -> None:
     """Mount a CephFS share.
 
     Args:
@@ -175,15 +165,15 @@ def mount(fs_info: CephFSInfo, mountpoint: Union[str, os.PathLike], options: Opt
     except FileExistsError:
         _logger.warning(f"Mountpoint {mountpoint} already exists.")
 
-    endpoint = f"{fs_info.username}@{fs_info.fsid}.{fs_info.name}={fs_info.path}"
+    endpoint = f"{auth_info.username}@{fs_info.fsid}.{fs_info.name}={fs_info.path}"
     _logger.debug(f"Mounting CephFS share {endpoint} at {target}")
     autofs_id = _mountpoint_to_autofs_id(target)
     mon_addr = "/".join(fs_info.monitor_hosts)
-    mount_opts = ["fstype=ceph", f"mon_addr={mon_addr}", f"secret={fs_info.cephx_key}"] + options
-    pathlib.Path(f"/etc/auto.master.d/{autofs_id}.autofs").write_text(
-        f"/- /etc/auto.{autofs_id}"
+    mount_opts = ["fstype=ceph", f"mon_addr={mon_addr}", f"secret={auth_info.key}"] + options
+    pathlib.Path(f"/etc/auto.master.d/{autofs_id}.autofs").write_text(f"/- /etc/auto.{autofs_id}")
+    pathlib.Path(f"/etc/auto.{autofs_id}").write_text(
+        f"{target} -{','.join(mount_opts)} {endpoint}"
     )
-    pathlib.Path(f"/etc/auto.{autofs_id}").write_text(f"{target} -{','.join(mount_opts)} {endpoint}")
 
     try:
         systemd.service_reload("autofs", restart_on_failure=True)
