@@ -1,3 +1,6 @@
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 name: cephfs-client
 
 type: charm
@@ -51,7 +54,7 @@ config:
     nodev:
       default: false
       description: |
-        Blocking interpretation of character and/or block 
+        Blocking interpretation of character and/or block
         devices on CephFS share.
       type: boolean
     read-only:

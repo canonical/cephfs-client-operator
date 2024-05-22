@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Manage machine CephFS mounts and dependencies."""
@@ -34,7 +34,7 @@ class Error(Exception):
         return self.args[0]
 
     def __repr__(self):
-        """String representation of the error."""
+        """Get a string representation of the error."""
         return f"<{type(self).__module__}.{type(self).__name__} {self.args}>"
 
 
@@ -141,7 +141,7 @@ def mounted(target: str) -> bool:
 
 
 def mount(
-    fs_info: cephfs.CephFSShareInfo,
+    share_info: cephfs.CephFSShareInfo,
     auth_info: cephfs.CephFSAuthInfo,
     mountpoint: Union[str, os.PathLike],
     options: Optional[List[str]] = None,
@@ -149,8 +149,10 @@ def mount(
     """Mount a CephFS share.
 
     Args:
-        fs_info: Information required to mount the CephFS share.
-        mountpoint: System location to mount the CephFS share endpoint.
+        share_info: Share information required to mount the CephFS share.
+        auth_info: Authentication information required to mount the CephFS share.
+        mountpoint: System location to mount the CephFS share.
+        options: Mount options to pass when mounting the CephFS share.
 
     Raises:
         Error: Raised if the mount operation fails.
@@ -165,10 +167,10 @@ def mount(
     except FileExistsError:
         _logger.warning(f"Mountpoint {mountpoint} already exists.")
 
-    endpoint = f"{auth_info.username}@{fs_info.fsid}.{fs_info.name}={fs_info.path}"
+    endpoint = f"{auth_info.username}@{share_info.fsid}.{share_info.name}={share_info.path}"
     _logger.debug(f"Mounting CephFS share {endpoint} at {target}")
     autofs_id = _mountpoint_to_autofs_id(target)
-    mon_addr = "/".join(fs_info.monitor_hosts)
+    mon_addr = "/".join(share_info.monitor_hosts)
     mount_opts = ["fstype=ceph", f"mon_addr={mon_addr}", f"secret={auth_info.key}"] + options
     pathlib.Path(f"/etc/auto.master.d/{autofs_id}.autofs").write_text(f"/- /etc/auto.{autofs_id}")
     pathlib.Path(f"/etc/auto.{autofs_id}").write_text(
@@ -234,7 +236,7 @@ def _mountpoint_to_autofs_id(mountpoint: Union[str, os.PathLike]) -> str:
 
 
 def _mounts(fstype: str) -> Iterator[MountInfo]:
-    """Gets an iterator of all mounts in the system that have the requested fstype.
+    """Get an iterator of all mounts in the system that have the requested fstype.
 
     Returns:
         Iterator[MountInfo]: All the mounts with a valid fstype.

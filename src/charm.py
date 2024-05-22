@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2024 Ubuntu
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Charm the application."""
@@ -142,7 +142,7 @@ class CephFSClientOperatorCharm(ops.CharmBase):
         self.peers.data[self.app][key] = json.dumps(data)
 
     def get_state(self, key: str) -> dict[Any, Any]:
-        """Gets a value from the global state."""
+        """Get a value from the global state."""
         if not self.peers:
             return {}
 
