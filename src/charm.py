@@ -2,7 +2,7 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Charm the application."""
+"""CephFS client charmed operator for mounting CephFS shares."""
 
 import json
 import logging
@@ -19,24 +19,27 @@ from charms.storage_libs.v0.cephfs_interfaces import (
 
 logger = logging.getLogger(__name__)
 
-PEER_NAME = "mount"
+PEER_NAME = "peers"
 MOUNT_OPTS = ["noexec", "nosuid", "nodev", "read-only"]
 
 
-class CephFSClientOperatorCharm(ops.CharmBase):
-    """Charm the application."""
+class CephFSClientCharm(ops.CharmBase):
+    """CephFS client charmed operator."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._ceph_share = CephFSRequires(self, "cephfs-share")
+        self._cephfs_share = CephFSRequires(self, "cephfs-share")
 
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.stop, self._on_stop)
-        self.framework.observe(self._ceph_share.on.server_connected, self._on_server_connected)
-        self.framework.observe(self._ceph_share.on.mount_share, self._on_mount_share)
-        self.framework.observe(self._ceph_share.on.umount_share, self._on_umount_share)
+        self.framework.observe(self._cephfs_share.on.server_connected, self._on_server_connected)
+        self.framework.observe(self._cephfs_share.on.mount_share, self._on_mount_share)
+        self.framework.observe(self._cephfs_share.on.umount_share, self._on_umount_share)
+
+        # ensures the required packages are installed after a `juju refresh`.
+        self.framework.observe(self.on.upgrade_charm, self._on_install)
 
     def _on_install(self, _) -> None:
         """Install required packages for mounting CephFS shares."""
@@ -96,7 +99,7 @@ class CephFSClientOperatorCharm(ops.CharmBase):
             event.defer()
             return
 
-        self._ceph_share.request_share(event.relation.id, name=mountpoint)
+        self._cephfs_share.request_share(event.relation.id, name=mountpoint)
 
     def _on_mount_share(self, event: MountShareEvent) -> None:
         """Mount a CephFS share."""
@@ -105,10 +108,10 @@ class CephFSClientOperatorCharm(ops.CharmBase):
             mountpoint = config["mountpoint"]
             if not cephfs.mounted(mountpoint):
                 opts = []
-                opts.append("noexec" if config["noexec"] else "exec")
-                opts.append("nosuid" if config["nosuid"] else "suid")
-                opts.append("nodev" if config["nodev"] else "dev")
-                opts.append("ro" if config["read-only"] else "rw")
+                opts.append("noexec" if config.get("noexec") else "exec")
+                opts.append("nosuid" if config.get("nosuid") else "suid")
+                opts.append("nodev" if config.get("nodev") else "dev")
+                opts.append("ro" if config.get("read-only") else "rw")
 
                 cephfs.mount(event.share_info, event.auth_info, mountpoint, options=opts)
                 self.unit.status = ops.ActiveStatus(f"CephFS share mounted at {mountpoint}")
@@ -151,4 +154,4 @@ class CephFSClientOperatorCharm(ops.CharmBase):
 
 
 if __name__ == "__main__":  # pragma: nocover
-    ops.main(CephFSClientOperatorCharm)  # type: ignore
+    ops.main(CephFSClientCharm)  # type: ignore
