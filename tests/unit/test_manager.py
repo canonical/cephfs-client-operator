@@ -47,7 +47,7 @@ class MountParams:
 
 @patch("charms.operator_libs_linux.v1.systemd.service_reload")
 @patch("subprocess.run")
-class TestNFSManager(TestCase):
+class TestCephFSManager(TestCase):
     """Test cephfs manager utils."""
 
     def setUp(self) -> None:
