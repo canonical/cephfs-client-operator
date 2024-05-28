@@ -55,13 +55,13 @@ class MountInfo:
 
 
 def supported() -> bool:
-    """Check if underlying base supports mounting NFS shares."""
+    """Check if underlying base supports mounting CephFS shares."""
     try:
         result = subprocess.run(
             ["systemd-detect-virt"], stdout=subprocess.PIPE, check=True, text=True
         )
         if "lxc" in result.stdout:
-            # Cannot mount NFS shares inside LXD containers.
+            # Cannot mount CephFS shares inside LXD containers.
             return False
         else:
             return True
@@ -229,7 +229,7 @@ def _mountpoint_to_autofs_id(mountpoint: Union[str, os.PathLike]) -> str:
     """Get the autofs id of a mountpoint path.
 
     Args:
-        mountpoint: NFS share mountpoint.
+        mountpoint: CephFS share mountpoint.
     """
     path = pathlib.Path(mountpoint).resolve()
     return str(path).lstrip("/").replace("/", "-")
