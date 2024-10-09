@@ -8,11 +8,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import PropertyMock, patch
 
-import utils.manager as cephfs
 import yaml
-from charm import PEER_NAME, CephFSClientCharm
 from ops.model import BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.testing import Harness
+
+import utils.manager as cephfs
+from charm import PEER_NAME, CephFSClientCharm
 
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 APP_NAME = METADATA["name"]

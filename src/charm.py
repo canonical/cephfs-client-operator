@@ -9,13 +9,14 @@ import logging
 from typing import Any
 
 import ops
-import utils.manager as cephfs
 from charms.storage_libs.v0.cephfs_interfaces import (
     CephFSRequires,
     MountShareEvent,
     ServerConnectedEvent,
     UmountShareEvent,
 )
+
+import utils.manager as cephfs
 
 logger = logging.getLogger(__name__)
 

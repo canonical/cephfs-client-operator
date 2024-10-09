@@ -15,9 +15,10 @@ from unittest.mock import patch
 
 import charms.operator_libs_linux.v0.apt as apt
 import charms.operator_libs_linux.v1.systemd as systemd
-import utils.manager as cephfs
 from charms.storage_libs.v0.cephfs_interfaces import CephFSAuthInfo, CephFSShareInfo
 from pyfakefs.fake_filesystem_unittest import TestCase
+
+import utils.manager as cephfs
 
 SHARE_INFO = CephFSShareInfo(
     fsid="abcdefg",
